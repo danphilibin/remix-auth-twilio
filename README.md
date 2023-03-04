@@ -1,48 +1,206 @@
-# Remix Auth - Strategy Template
+# Remix Auth - Twilio Strategy
 
-> A template for creating a new Remix Auth strategy.
+Uses the [Twilio Verify API](https://www.twilio.com/verify) to validate users via SMS and add simple phone-based auth to a [Remix](https://remix.run) application.
 
-If you want to create a new strategy for Remix Auth, you could use this as a template for your repository.
+This library is designed to require as little config as possible. There's no need to generate your own codes, validate input, or store anything aside from the user's phone number in your database. If you need more advanced functionality and customizations, check out [remix-auth-otp](https://github.com/dev-xo/remix-auth-otp).
 
-The repo installs the latest version of Remix Auth and do the setup for you to have tests, linting and typechecking.
+## Usage
 
-## How to use it
+### Create a Twilio account
 
-1. In the `package.json` change `name` to your strategy name, also add a description and ideally an author, repository and homepage keys.
-2. In `src/index.ts` change the `MyStrategy` for the strategy name you want to use.
-3. Implement the strategy flow inside the `authenticate` method. Use `this.success` and `this.failure` to correctly send finish the flow.
-4. In `tests/index.test.ts` change the tests to use your strategy and test it. Inside the tests you have access to `jest-fetch-mock` to mock any fetch you may need to do.
-5. Once you are ready, set the secrets on Github
-   - `NPM_TOKEN`: The token for the npm registry
-   - `GIT_USER_NAME`: The git username you want the bump workflow to use in the commit.
-   - `GIT_USER_EMAIL`: The email you want the bump workflow to use in the commit.
+Create a [Twilio](https://www.twilio.com) account, then go to the Verify tab in the dashboard and create a new service. You'll need three keys from the Twilio dashboard: an **Account SID**, an **Auth Token**, and a **Service SID**.
 
-## Scripts
+### Create the strategy instance
 
-- `build`: Build the project for production using the TypeScript compiler (strips the types).
-- `typecheck`: Check the project for type errors, this also happens in build but it's useful to do in development.
-- `lint`: Runs ESLint against the source codebase to ensure it pass the linting rules.
-- `test`: Runs all the test using Jest.
+```ts
+// app/session.server.ts
+import { createCookieSessionStorage } from "@remix-run/node";
 
-## Documentations
+export const sessionStorage = createCookieSessionStorage({
+  cookie: {
+    name: "_rmx-session", // use any name you want here
+    sameSite: "lax", // this helps with CSRF
+    path: "/", // remember to add this so the cookie will work in all routes
+    httpOnly: true, // for security reasons, make this cookie http only
+    secrets: ["s3cr3t"], // replace this with an actual secret
+    secure: process.env.NODE_ENV === "production", // enable this in prod only
+  },
+});
+```
 
-To facilitate creating a documentation for your strategy, you can use the following Markdown
+```ts
+// app/auth.server.ts
+import { TwilioStrategy } from "remix-auth-twilio";
+import { sessionStorage } from "./session.server";
+import { User, findOrCreateUser } from "your-db-client";
 
-```markdown
-# Strategy Name
+export let authenticator = new Authenticator<User>(sessionStorage);
 
-<!-- Description -->
+const twilioStrategy = new TwilioStrategy(
+  {
+    accountSID: "YOUR_ACCOUNT_SID",
+    authToken: "YOUR_AUTH_TOKEN",
+    serviceSID: "YOUR_SERVICE_SID",
+  },
+  async ({ phone, formData, request }) => {
+    // The user has been authenticated through Twilio.
+    // Get the user data from your DB or API using the formatted phone number.
+    return findOrCreateUser({ phone });
+  }
+);
 
-## Supported runtimes
+authenticator.use(twilioStrategy);
+```
 
-| Runtime    | Has Support |
-| ---------- | ----------- |
-| Node.js    | ✅          |
-| Cloudflare | ✅          |
+### Set up your routes
 
-<!-- If it doesn't support one runtime, explain here why -->
+```tsx
+// app/routes/login.tsx
+import { ActionArgs, DataFunctionArgs, json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
+import { authenticator } from "../auth.server";
+import { sessionStorage } from "../session.server";
 
-## How to use
+export async function action({ request }: ActionArgs) {
+  const formData = await request.clone().formData();
 
-<!-- Explain how to use the strategy, here you should tell what options it expects from the developer when instantiating the strategy -->
+  return authenticator.authenticate("twilio", request, {
+    successRedirect: formData.has("code") ? "/account" : "/login",
+    failureRedirect: "/login",
+  });
+}
+
+export async function loader({ request }: DataFunctionArgs) {
+  await authenticator.isAuthenticated(request, {
+    successRedirect: "/account",
+  });
+
+  const session = await sessionStorage.getSession(
+    request.headers.get("Cookie")
+  );
+
+  const phone = session.get("twilio:phone") ?? null;
+
+  const error = session.get(authenticator.sessionErrorKey);
+
+  return json(
+    { phone, error },
+    {
+      headers: {
+        "Set-Cookie": await sessionStorage.commitSession(session),
+      },
+    }
+  );
+}
+
+export default function LoginPage() {
+  const { phone, error } = useLoaderData<typeof loader>();
+
+  return (
+    <form method="post">
+      {error && <p>Error: {error.message}</p>}
+      {phone ? (
+        <>
+          <label htmlFor="code">Verification code</label>
+          <input
+            type="text"
+            name="code"
+            id="code"
+            autoFocus
+            autoComplete="one-time-code"
+            inputMode="numeric"
+            pattern="[0-9]*"
+          />
+          <input type="hidden" name="phone" value={phone} />
+        </>
+      ) : (
+        <>
+          <label htmlFor="phone">Phone number</label>
+          <input type="tel" name="phone" id="phone" autoComplete="tel" />
+        </>
+      )}
+    </form>
+  );
+}
+```
+
+```tsx
+// app/routes/account.tsx
+import { DataFunctionArgs, json } from "@remix-run/node";
+import { Link, useLoaderData } from "@remix-run/react";
+import { authenticator } from "~/auth.server";
+
+export async function loader({ request }: DataFunctionArgs) {
+  const user = await authenticator.isAuthenticated(request, {
+    failureRedirect: "/login",
+  });
+
+  return json({ user });
+}
+
+export default function AccountPage() {
+  const { user } = useLoaderData<typeof loader>();
+
+  return (
+    <div>
+      <p>Hello, {user.phone}</p>
+      <p>
+        <Link to="/logout">Log out</Link>
+      </p>
+    </div>
+  );
+}
+```
+
+```tsx
+// app/routes/logout.tsx
+import { DataFunctionArgs } from "@remix-run/node";
+import { authenticator } from "~/auth.server";
+
+export async function loader({ request }: DataFunctionArgs) {
+  await authenticator.logout(request, { redirectTo: "/login" });
+}
+
+export default function LogoutPage() {
+  return null;
+}
+```
+
+## Options
+
+```ts
+type TwilioStrategyOptions = {
+  /**
+   * Twilio Account SID
+   */
+  accountSID?: string;
+  /**
+   * Twilio Auth Token
+   */
+  authToken?: string;
+  /**
+   * Twilio Verify Service SID
+   */
+  serviceSID?: string;
+  /**
+   * A function that sends a verification code to the user.
+   */
+  sendCode?: ({ phone }: { phone: string }) => Promise<void>;
+  /**
+   * A function that validates the verification code provided by the user.
+   */
+  validateCode?: ({
+    code,
+    phone,
+  }: {
+    code: string;
+    phone: string;
+  }) => Promise<void>;
+  /**
+   * A function that formats the phone number provided by the user.
+   * This library uses the `phone` package to validate phone numbers.
+   * You can optionally provide your own validation function here.
+   */
+  formatPhoneNumber?: (phone: string) => string;
+};
 ```

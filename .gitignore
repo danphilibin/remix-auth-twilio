@@ -4,3 +4,7 @@
 
 *.log
 .DS_Store
+.vscode
+
+# https://www.twilio.com/blog/test-verify-no-rate-limits#run-a-verify-testing-dashboard-during-development
+verify-testing-dashboard
