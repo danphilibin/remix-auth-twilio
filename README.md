@@ -1,6 +1,6 @@
 # Remix Auth - Twilio Strategy
 
-Uses the [Twilio Verify API](https://www.twilio.com/verify) to validate users via SMS and add simple phone-based auth to a [Remix](https://remix.run) application.
+Uses the [Twilio Verify API](https://www.twilio.com/verify) to validate users via SMS and add simple phone-based auth to a [Remix](https://remix.run) application using [Remix Auth](https://github.com/sergiodxa/remix-auth).
 
 This library is designed to require as little config as possible. There's no need to generate your own codes, validate input, or store anything aside from the user's phone number in your database. If you need more advanced functionality and customizations, check out [remix-auth-otp](https://github.com/dev-xo/remix-auth-otp).
 
