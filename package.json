@@ -17,6 +17,15 @@
     "strategy"
   ],
   "license": "MIT",
+  "author": {
+    "name": "Dan Philibin",
+    "email": "dan@danphilibin.com",
+    "url": "https://github.com/danphilibin"
+  },
+  "repository": {
+    "url": "https://github.com/danphilibin/remix-auth-twilio",
+    "type": "git"
+  },
   "files": [
     "build",
     "package.json",
