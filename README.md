@@ -2,9 +2,15 @@
 
 Uses the [Twilio Verify API](https://www.twilio.com/verify) to validate users via SMS and add simple phone-based auth to a [Remix](https://remix.run) application using [Remix Auth](https://github.com/sergiodxa/remix-auth).
 
+## Getting started
+
 This library is designed to require as little config as possible. There's no need to generate your own codes, validate input, or store anything aside from the user's phone number in your database. If you need more advanced functionality and customizations, check out [remix-auth-otp](https://github.com/dev-xo/remix-auth-otp).
 
-## Usage
+## Install the package
+
+```
+yarn add remix-auth-twilio
+```
 
 ### Create a Twilio account
 
@@ -173,15 +179,15 @@ type TwilioStrategyOptions = {
   /**
    * Twilio Account SID
    */
-  accountSID?: string;
+  accountSID: string;
   /**
    * Twilio Auth Token
    */
-  authToken?: string;
+  authToken: string;
   /**
    * Twilio Verify Service SID
    */
-  serviceSID?: string;
+  serviceSID: string;
   /**
    * A function that sends a verification code to the user.
    */
